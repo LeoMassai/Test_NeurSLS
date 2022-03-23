@@ -202,6 +202,6 @@ This work is licensed under a
 
 
 ## References
-[1] Luca Furieri, Clara Galimberti, Giancarlo Ferrari-Trecate.
+[[1]](https://arxiv.org/pdf/2203.11812.pdf) Luca Furieri, Clara Galimberti, Giancarlo Ferrari-Trecate.
 "Neural System Level Synthesis: Learning over All Stabilizing Policies for Nonlinear Systems,"
-under review.
+arXiv:2203.11812, 2022.
