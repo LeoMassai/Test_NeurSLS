@@ -47,7 +47,7 @@ class PsiU(nn.Module):
         self.Lq = torch.zeros(m, m)
         self.Lr = torch.zeros(n, n)
         self.D22 = torch.zeros(m, n)
-        self.gamma = nn.Parameter(4*torch.randn(1))
+        self.gamma = nn.Parameter(2*torch.randn(1))
 
     def forward(self, t, w, xi):
         # Parameters update-------------------------------------------------------

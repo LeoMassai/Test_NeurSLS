@@ -19,13 +19,13 @@ from src.loss_functions import f_loss_states, f_loss_u, f_loss_ca, f_loss_obst
 from src.utils import calculate_collisions, set_params
 
 
-def main(sys_model):
+def main(sys_model, gpu=True):
     """
     :param sys_model: System where to design a controller. Select from: "corridor", "robots".
     :param gpu: Whether to use GPU during training.
     :return:
     """
-    torch.manual_seed(1)
+    torch.manual_seed(2)
     # # # # # # # # Parameters and hyperparameters # # # # # # # #
     if sys_model == "corridor" or sys_model == "robots":
         params = set_params(sys_model)
