@@ -18,7 +18,7 @@ def set_params(sys_model):
         linear = False
         # # # # # # # # Hyperparameters # # # # # # # #
         learning_rate = 1e-3
-        epochs = 500
+        epochs = 300
         Q = torch.kron(torch.eye(n_agents), torch.diag(torch.tensor([1, 1, 1, 1.])))
         alpha_u = 0.1  # Regularization parameter for penalizing the input
         alpha_ca = 100

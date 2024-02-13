@@ -2,6 +2,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 
 # REN implementation in the acyclic version
@@ -9,23 +10,27 @@ import torch.nn.functional as F
 class PsiU(nn.Module):
     def __init__(self, n, m, n_xi, l):
         super().__init__()
-        self.n = n
-        self.n_xi = n_xi
-        self.l = l
-        self.m = m
+        self.n = n  # nel paper m
+        self.n_xi = n_xi  # nel paper n1
+        self.l = l  # nel paper q
+        self.m = m  # nel paper p1
+        self.s = np.max((n, m))  # s nel paper, dimensione di X3 Y3
+
         # # # # # # # # # Training parameters # # # # # # # # #
         # Auxiliary matrices:
-        std = 0.1
-        self.X = nn.Parameter((torch.randn(2*n_xi+l, 2*n_xi+l)*std))
-        self.Y = nn.Parameter((torch.randn(n_xi, n_xi)*std))
+        std = 1
+        self.X = nn.Parameter((torch.randn(2 * n_xi + l, 2 * n_xi + l) * std))
+        self.Y = nn.Parameter((torch.randn(n_xi, n_xi) * std))  # Y1 nel paper
         # NN state dynamics:
-        self.B2 = nn.Parameter((torch.randn(n_xi, n)*std))
+        self.B2 = nn.Parameter((torch.randn(n_xi, n) * std))
         # NN output:
-        self.C2 = nn.Parameter((torch.randn(m, n_xi)*std))
-        self.D21 = nn.Parameter((torch.randn(m, l)*std))
-        self.D22 = nn.Parameter((torch.randn(m, n)*std))
+        self.C2 = nn.Parameter((torch.randn(m, n_xi) * std))
+        self.D21 = nn.Parameter((torch.randn(m, l) * std))
+        self.X3 = nn.Parameter(torch.randn(self.s, self.s) * std)
+        self.Y3 = nn.Parameter(torch.randn(self.s, self.s) * std)
+
         # v signal:
-        self.D12 = nn.Parameter((torch.randn(l, n)*std))
+        self.D12 = nn.Parameter((torch.randn(l, n) * std))
         # bias:
         # self.bxi = nn.Parameter(torch.randn(n_xi))
         # self.bv = nn.Parameter(torch.randn(l))
@@ -39,12 +44,33 @@ class PsiU(nn.Module):
         self.Lambda = torch.ones(l)
         self.C1 = torch.zeros(l, n_xi)
         self.D11 = torch.zeros(l, l)
-        self.set_model_param()
+        self.Lq = torch.zeros(m, m)
+        self.Lr = torch.zeros(n, n)
+        self.D22 = torch.zeros(m, n)
+        self.gamma = nn.Parameter(4*torch.randn(1))
 
-    def set_model_param(self):
+    def forward(self, t, w, xi):
+        # Parameters update-------------------------------------------------------
+        gammap = torch.abs(self.gamma)
         n_xi = self.n_xi
         l = self.l
-        H = torch.matmul(self.X.T, self.X) + self.epsilon * torch.eye(2*n_xi+l)
+        n = self.n
+        m = self.m
+        R = gammap * torch.eye(n, n)
+        Q = (-1 / gammap) * torch.eye(m, m)
+        M = F.linear(self.X3, self.X3) + self.Y3 - self.Y3.T + self.epsilon * torch.eye(self.s)
+        M_tilde = F.linear(torch.eye(self.s) - M,
+                           torch.inverse(torch.eye(self.s) + M))
+        Zeta = M_tilde[0:self.m, 0:self.n]
+        self.D22 = gammap * Zeta
+        R_capital = R - (1 / gammap) * F.linear(self.D22.T, self.D22.T)
+        C2_capital = torch.matmul(torch.matmul(self.D22.T, Q), self.C2)
+        D21_capital = torch.matmul(torch.matmul(self.D22.T, Q), self.D21) - self.D12.T
+        vec_R = torch.cat([C2_capital.T, D21_capital.T, self.B2], 0)
+        vec_Q = torch.cat([self.C2.T, self.D21.T, torch.zeros(n_xi, m)], 0)
+        H = torch.matmul(self.X.T, self.X) + self.epsilon * torch.eye(2 * n_xi + l) + torch.matmul(
+            torch.matmul(vec_R, torch.inverse(R_capital)), vec_R.T) - torch.matmul(
+            torch.matmul(vec_Q, Q), vec_Q.T)
         h1, h2, h3 = torch.split(H, (n_xi, l, n_xi), dim=0)
         H11, H12, H13 = torch.split(h1, (n_xi, l, n_xi), dim=1)
         H21, H22, _ = torch.split(h2, (n_xi, l, n_xi), dim=1)
@@ -60,21 +86,25 @@ class PsiU(nn.Module):
         self.D11 = -torch.tril(H22, diagonal=-1)
         self.C1 = -H21
 
-    def forward(self, t, w, xi):
+        # Forward dynamics-------------------------------------------------------
         vec = torch.zeros(self.l)
         vec[0] = 1
         epsilon = torch.zeros(self.l)
-        v = F.linear(xi, self.C1[0,:]) + F.linear(w, self.D12[0,:])  # + self.bv[0]
-        epsilon = epsilon + vec * torch.tanh(v/self.Lambda[0])
+        v = F.linear(xi, self.C1[0, :]) + F.linear(w,
+                                                   self.D12[0, :])  # + self.bv[0]
+        epsilon = epsilon + vec * torch.relu(v / self.Lambda[0])
         for i in range(1, self.l):
             vec = torch.zeros(self.l)
             vec[i] = 1
-            v = F.linear(xi, self.C1[i,:]) + F.linear(epsilon, self.D11[i,:]) + F.linear(w, self.D12[i,:])  # self.bv[i]
-            epsilon = epsilon + vec * torch.tanh(v/self.Lambda[i])
-        E_xi_ = F.linear(xi, self.F) + F.linear(epsilon, self.B1) + F.linear(w, self.B2)  # + self.bxi
+            v = F.linear(xi, self.C1[i, :]) + F.linear(epsilon,
+                                                       self.D11[i, :]) + F.linear(w, self.D12[i, :])  # self.bv[i]
+            epsilon = epsilon + vec * torch.relu(v / self.Lambda[i])
+        E_xi_ = F.linear(xi, self.F) + F.linear(epsilon,
+                                                self.B1) + F.linear(w, self.B2)  # + self.bxi
         xi_ = F.linear(E_xi_, self.E.inverse())
-        u = F.linear(xi, self.C2) + F.linear(epsilon, self.D21) + F.linear(w, self.D22)  # + self.bu
-        return u, xi_
+        u = F.linear(xi, self.C2) + F.linear(epsilon, self.D21) + \
+            F.linear(w, self.D22)  # + self.bu
+        return u, xi_, gammap
 
 
 class PsiX(nn.Module):
@@ -102,17 +132,17 @@ class Controller(nn.Module):
     def forward(self, t, y_, xi, omega):
         psi_x, _ = self.psi_x(t, omega)
         w_ = y_ - psi_x
-        u_, xi_ = self.psi_u(t, w_, xi)
+        u_, xi_, gamma = self.psi_u(t, w_, xi)
         omega_ = (y_, u_)
-        return u_, xi_, omega_
+        return u_, xi_, omega_, gamma
 
 
 class SystemRobots(nn.Module):
     def __init__(self, xbar, linear=True):
         super().__init__()
-        self.n_agents = int(xbar.shape[0]/4)
-        self.n = 4*self.n_agents
-        self.m = 2*self.n_agents
+        self.n_agents = int(xbar.shape[0] / 4)
+        self.n = 4 * self.n_agents
+        self.m = 2 * self.n_agents
         self.h = 0.05
         self.mass = 1.0
         self.k = 1.0
@@ -125,8 +155,8 @@ class SystemRobots(nn.Module):
         self.B = torch.kron(torch.eye(self.n_agents),
                             torch.tensor([[0, 0],
                                           [0., 0],
-                                          [1/m, 0],
-                                          [0, 1/m]])
+                                          [1 / m, 0],
+                                          [0, 1 / m]])
                             )
         self.xbar = xbar
 
@@ -134,19 +164,19 @@ class SystemRobots(nn.Module):
         b2 = self.b2
         b1 = self.b
         m, k = self.mass, self.k
-        A1 = torch.eye(4*self.n_agents)
-        A2 = torch.cat((torch.cat((torch.zeros(2,2),
+        A1 = torch.eye(4 * self.n_agents)
+        A2 = torch.cat((torch.cat((torch.zeros(2, 2),
                                    torch.eye(2)
                                    ), dim=1),
-                        torch.cat((torch.diag(torch.tensor([-k/m, -k/m])),
-                                   torch.diag(torch.tensor([-b1/m, -b1/m]))
-                                   ),dim=1),
-                        ),dim=0)
+                        torch.cat((torch.diag(torch.tensor([-k / m, -k / m])),
+                                   torch.diag(torch.tensor([-b1 / m, -b1 / m]))
+                                   ), dim=1),
+                        ), dim=0)
         A2 = torch.kron(torch.eye(self.n_agents), A2)
         mask = torch.tensor([[0, 0], [1, 1]]).repeat(self.n_agents, 1)
         A3 = torch.norm(x.view(2 * self.n_agents, 2) * mask, dim=1, keepdim=True)
-        A3 = torch.kron(A3, torch.ones(2,1))
-        A3 = -b2/m * torch.diag(A3.squeeze())
+        A3 = torch.kron(A3, torch.ones(2, 1))
+        A3 = -b2 / m * torch.diag(A3.squeeze())
         A = A1 + self.h * (A2 + A3)
         return A
 

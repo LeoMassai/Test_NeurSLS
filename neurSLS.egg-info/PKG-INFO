@@ -1,0 +1,12 @@
+Metadata-Version: 2.1
+Name: neurSLS
+Version: 1.0
+Summary: Neural System Level Synthesis
+Home-page: https://github.com/DecodEPFL/neurSLS
+Author: Clara Galimberti
+Author-email: clara.galimberti@epfl.ch
+License: CC-BY-4.0 License
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Requires-Python: >=3.8
+License-File: LICENSE.md
