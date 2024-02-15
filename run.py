@@ -9,7 +9,7 @@ Flags:
   --sys_model: select system where to design a controller. Available options: corridor, robots.
   --gpu: whether to use GPU.
 """
-
+import numpy as np
 import torch
 import argparse
 
@@ -19,13 +19,24 @@ from src.loss_functions import f_loss_states, f_loss_u, f_loss_ca, f_loss_obst
 from src.utils import calculate_collisions, set_params
 
 
-def main(sys_model, gpu=True):
+def main(sys_model):
     """
     :param sys_model: System where to design a controller. Select from: "corridor", "robots".
     :param gpu: Whether to use GPU during training.
     :return:
     """
-    torch.manual_seed(2)
+    torch.manual_seed(1)
+
+    o2 = torch.zeros((2, 2))
+    i2 = torch.eye(2)
+    o4 = torch.zeros((4, 4))
+    N = 2
+
+    Muy = torch.vstack((torch.hstack((o2, i2)), o4, torch.hstack((i2, o2)), o4))
+    Mud = torch.vstack((torch.zeros((2, 8)),
+                        torch.hstack((torch.eye(4), o4)), torch.zeros((2, 8)),
+                        torch.hstack((o4, torch.eye(4)))))
+
     # # # # # # # # Parameters and hyperparameters # # # # # # # #
     if sys_model == "corridor" or sys_model == "robots":
         params = set_params(sys_model)
@@ -35,7 +46,7 @@ def main(sys_model, gpu=True):
         raise ValueError("System model not implemented.")
     # # # # # # # # Define models # # # # # # # #
     sys = SystemRobots(xbar, linear)
-    ctl = Controller(sys.f, sys.n, sys.m, n_xi, l)
+    ctl = Controller(sys.f, N, Muy, Mud, np.array([6, 6]), np.array([2, 2]), n_xi, l)
     # # # # # # # # Define optimizer and parameters # # # # # # # #
     optimizer = torch.optim.Adam(ctl.parameters(), lr=learning_rate)
     # # # # # # # # Training # # # # # # # #
@@ -43,7 +54,6 @@ def main(sys_model, gpu=True):
     print("Problem: " + sys_model + " -- t_end: %i" % t_end + " -- lr: %.2e" % learning_rate +
           " -- epochs: %i" % epochs + " -- n_traj: %i" % n_traj + " -- std_ini: %.2f" % std_ini)
     print(" -- alpha_u: %.1f" % alpha_u + " -- alpha_ca: %i" % alpha_ca + " -- alpha_obst: %.1e" % alpha_obst)
-    print("REN info -- n_xi: %i" % n_xi + " -- l: %i" % l)
     print("--------- --------- ---------  ---------")
     for epoch in range(epochs):
         gamma = []
@@ -57,11 +67,11 @@ def main(sys_model, gpu=True):
             w_in[0, :] = (x0.detach() - sys.xbar) + std_ini * torch.randn(x0.shape)
             u = torch.zeros(sys.m)
             x = sys.xbar
-            xi = torch.zeros(ctl.psi_u.n_xi)
+            xi = torch.zeros((sum(n_xi)))
             omega = (x, u)
             for t in range(t_end):
                 x, _ = sys(t, x, u, w_in[t, :])
-                u, xi, omega, gamma = ctl(t, x, xi, omega)
+                u, xi, omega, gamma = ctl(t, u, x, xi, omega)
                 loss_x = loss_x + f_loss_states(t, x, sys, Q)
                 loss_u = loss_u + alpha_u * f_loss_u(t, u)
                 loss_ca = loss_ca + alpha_ca * f_loss_ca(x, sys, min_dist)
@@ -76,17 +86,17 @@ def main(sys_model, gpu=True):
     # # # # # # # # Save trained model # # # # # # # #
     torch.save(ctl.psi_u.state_dict(), "trained_models/" + sys_model + "_tmp.pt")
     # # # # # # # # Print & plot results # # # # # # # #
-    x_log = torch.zeros(t_end, sys.n)
-    u_log = torch.zeros(t_end, sys.m)
-    w_in = torch.zeros(t_end + 1, sys.n)
+    x_log = torch.zeros((t_end, sys.n))
+    u_log = torch.zeros((t_end, sys.m))
+    w_in = torch.zeros((t_end + 1, sys.n))
     w_in[0, :] = (x0.detach() - sys.xbar)
     u = torch.zeros(sys.m)
     x = sys.xbar
-    xi = torch.zeros(ctl.psi_u.n_xi)
+    xi = torch.zeros((sum(n_xi)))
     omega = (x, u)
     for t in range(t_end):
         x, _ = sys(t, x, u, w_in[t, :])
-        u, xi, omega, gamma = ctl(t, x, xi, omega)
+        u, xi, omega, gamma = ctl(t, u, x, xi, omega)
         x_log[t, :] = x.detach()
         u_log[t, :] = u.detach()
     plot_traj_vs_time(t_end, sys.n_agents, x_log, u_log)
@@ -101,11 +111,11 @@ def main(sys_model, gpu=True):
     w_in[0, :] = (x0.detach() - sys.xbar)
     u = torch.zeros(sys.m)
     x = sys.xbar
-    xi = torch.zeros(ctl.psi_u.n_xi)
+    xi = torch.zeros((sum(n_xi)))
     omega = (x, u)
     for t in range(t_ext):
         x, _ = sys(t, x, u, w_in[t, :])
-        u, xi, omega, gamma = ctl(t, x, xi, omega)
+        u, xi, omega, gamma = ctl(t, u, x, xi, omega)
         x_log[t, :] = x.detach()
         u_log[t, :] = u.detach()
     plot_trajectories(x_log, xbar, sys.n_agents, text="CL - after training - extended t", T=t_end, obst=alpha_obst)

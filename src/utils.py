@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 def calculate_collisions(x, sys, min_dist):
@@ -19,13 +20,13 @@ def set_params(sys_model):
         linear = False
         # # # # # # # # Hyperparameters # # # # # # # #
         learning_rate = 1e-3
-        epochs = 300
+        epochs = 500
         Q = torch.kron(torch.eye(n_agents), torch.diag(torch.tensor([1, 1, 1, 1.])))
         alpha_u = 0.1  # Regularization parameter for penalizing the input
         alpha_ca = 100
         alpha_obst = 5e3
-        n_xi = 32  # \xi dimension -- number of states of REN
-        l = 32  # dimension of the square matrix D11 -- number of _non-linear layers_ of the REN
+        n_xi = np.array([20, 20])  # \xi dimension -- number of states of REN
+        l = np.array([20, 20])  # dimension of the square matrix D11 -- number of _non-linear layers_ of the REN
         n_traj = 5  # number of trajectories collected at each step of the learning
         std_ini = 0.2  # standard deviation of initial conditions
     else:  # sys_model == "robots"

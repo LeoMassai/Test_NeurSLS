@@ -7,7 +7,7 @@ import numpy as np
 
 # REN implementation in the acyclic version
 # See paper: "Recurrent Equilibrium Networks: Flexible dynamic models with guaranteed stability and robustness"
-class PsiU(nn.Module):
+class RENRG(nn.Module):
     def __init__(self, n, m, n_xi, l):
         super().__init__()
         self.n = n  # nel paper m
@@ -36,9 +36,9 @@ class PsiU(nn.Module):
         # v signal:
         self.D12 = nn.Parameter((torch.randn(l, n) * std))
         # bias:
-        self.bxi = nn.Parameter(torch.randn(n_xi))
-        self.bv = nn.Parameter(torch.randn(l))
-        self.bu = nn.Parameter(torch.randn(m))
+        # self.bxi = nn.Parameter(torch.randn(n_xi))
+        # self.bv = nn.Parameter(torch.randn(l))
+        # self.bu = nn.Parameter(torch.randn(m))
         # # # # # # # # # Non-trainable parameters # # # # # # # # #
         # Auxiliary elements
         self.epsilon = 0.001
@@ -51,11 +51,9 @@ class PsiU(nn.Module):
         self.Lq = torch.zeros(m, m)
         self.Lr = torch.zeros(n, n)
         self.D22 = torch.zeros(m, n)
-        self.gamma = nn.Parameter(torch.randn(1))
 
-    def forward(self, t, w, xi):
+    def forward(self, t, w, xi, gammap):
         # Parameters update-------------------------------------------------------
-        gammap = torch.abs(self.gamma)
         n_xi = self.n_xi
         l = self.l
         n = self.n
@@ -63,7 +61,7 @@ class PsiU(nn.Module):
         R = gammap * torch.eye(n, n)
         Q = (-1 / gammap) * torch.eye(m, m)
         M = F.linear(self.X3.T, self.X3.T) + self.Y3 - self.Y3.T + F.linear(self.Z3.T,
-                                                                             self.Z3.T) + self.epsilon * torch.eye(
+                                                                            self.Z3.T) + self.epsilon * torch.eye(
             min(n, m))
         if m >= n:
             N = torch.vstack((F.linear(torch.eye(min(n, m)) - M,
@@ -92,7 +90,7 @@ class PsiU(nn.Module):
         self.F = H31
         self.B1 = H32
         # NN output:
-        self.E = 0.5 * (H11 +  P + self.Y - self.Y.T)
+        self.E = 0.5 * (H11 + P + self.Y - self.Y.T)
         # v signal:  [Change the following 2 lines if we don't want a strictly acyclic REN!]
         self.Lambda = torch.diag(H22)
         self.D11 = -torch.tril(H22, diagonal=-1)
@@ -109,15 +107,15 @@ class PsiU(nn.Module):
             vec = torch.zeros(self.l)
             vec[i] = 1
             v = F.linear(xi, self.C1[i, :]) + F.linear(epsilon,
-                                                       self.D11[i, :]) + F.linear(w, self.D12[i, :])\
-                + self.bv[i]
+                                                       self.D11[i, :]) + F.linear(w, self.D12[i, :]) \
+                #+ self.bv[i]
             epsilon = epsilon + vec * torch.relu(v / self.Lambda[i])
         E_xi_ = F.linear(xi, self.F) + F.linear(epsilon,
-                                                self.B1) + F.linear(w, self.B2) + self.bxi
+                                                self.B1) + F.linear(w, self.B2) #+ self.bxi
         xi_ = F.linear(E_xi_, self.E.inverse())
         u = F.linear(xi, self.C2) + F.linear(epsilon, self.D21) + \
-            F.linear(w, self.D22) + self.bu
-        return u, xi_, gammap
+            F.linear(w, self.D22) #+ self.bu
+        return u, xi_
 
 
 class PsiX(nn.Module):
@@ -135,17 +133,20 @@ class PsiX(nn.Module):
 
 
 class Controller(nn.Module):
-    def __init__(self, f, n, m, n_xi, l):
+    def __init__(self, f, N, Muy, Mud, n, m, n_xi, l):
         super().__init__()
+        self.Muy = Muy
+        self.Mud = Mud
+        self.N = N
         self.n = n
         self.m = m
         self.psi_x = PsiX(f)
-        self.psi_u = PsiU(self.n, self.m, n_xi, l)
+        self.psi_u = PsiU(N, Muy, Mud, n, m, n_xi, l)
 
-    def forward(self, t, y_, xi, omega):
+    def forward(self, t, ym, y_, xi, omega):
         psi_x, _ = self.psi_x(t, omega)
         w_ = y_ - psi_x
-        u_, xi_, gamma = self.psi_u(t, w_, xi)
+        u_, xi_, gamma = self.psi_u(t, ym, w_, xi)
         omega_ = (y_, u_)
         return u_, xi_, omega_, gamma
 
@@ -205,3 +206,53 @@ class SystemRobots(nn.Module):
         x_ = self.f(t, x, u) + w  # here we can add noise not modelled
         y = x_
         return x_, y
+
+
+class PsiU(nn.Module):
+    def __init__(self, N, Muy, Mud, n, p, n_xi, l):
+        super().__init__()
+        self.p = p
+        self.n = n  # nel paper m
+        self.n_xi = n_xi  # nel paper n1
+        self.l = l  # nel paper q
+        self.Muy = Muy
+        self.Mud = Mud
+        self.N = N
+        self.r = nn.ModuleList([RENRG(self.n[j], self.p[j], self.n_xi[j], self.l[j]) for j in range(N)])
+        self.y = nn.Parameter(torch.randn(N))
+        self.gammaw = torch.randn(1)
+
+    def forward(self, t, ym, d, xim):
+        Muy = self.Muy
+        Mud = self.Mud
+        yp = torch.abs(self.y)
+        stopu = 0
+        stopy = 0
+        stop = 0
+        stopx = 0
+        u = torch.matmul(Muy, ym) + torch.matmul(Mud, d)
+        y_list = []
+        xi_list = []
+        gamma_list = []
+        for j, l in enumerate(self.r):
+            wideu = l.n
+            widey = l.m
+            stopu = stopu + wideu
+            stopy = stopy + widey
+            gamma = 1 / (np.sqrt(2) + torch.square(yp[j]))
+            widex = l.n_xi
+            startx = stopx
+            stopx = stopx + widex
+            start = stop
+            stop = stop + wideu
+            index = range(start, stop)
+            indexx = range(startx, stopx)
+            yt, xitemp = l(t, u[index], xim[indexx], gamma)
+            y_list.append(yt)
+            xi_list.append(xitemp)
+            gamma_list.append(gamma)
+
+        y = torch.cat(y_list)
+        xi = torch.cat(xi_list)
+
+        return y, xi, gamma_list
