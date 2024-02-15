@@ -13,8 +13,7 @@ class PsiU(nn.Module):
         self.n = n  # nel paper m
         self.n_xi = n_xi  # nel paper n1
         self.l = l  # nel paper q
-        self.m = m  # nel paper p1
-        self.s = np.max((n, m))  # s nel paper, dimensione di X3 Y3
+        self.m = m  # nel paper p
 
         # # # # # # # # # Training parameters # # # # # # # # #
         # Auxiliary matrices:
@@ -26,15 +25,20 @@ class PsiU(nn.Module):
         # NN output:
         self.C2 = nn.Parameter((torch.randn(m, n_xi) * std))
         self.D21 = nn.Parameter((torch.randn(m, l) * std))
-        self.X3 = nn.Parameter(torch.randn(self.s, self.s) * std)
-        self.Y3 = nn.Parameter(torch.randn(self.s, self.s) * std)
-
+        if m >= n:
+            self.Z3 = nn.Parameter(torch.randn(m - n, n) * std)
+            self.X3 = nn.Parameter(torch.randn(n, n) * std)
+            self.Y3 = nn.Parameter(torch.randn(n, n) * std)
+        else:
+            self.Z3 = nn.Parameter(torch.randn(n - m, m) * std)
+            self.X3 = nn.Parameter(torch.randn(m, m) * std)
+            self.Y3 = nn.Parameter(torch.randn(m, m) * std)
         # v signal:
         self.D12 = nn.Parameter((torch.randn(l, n) * std))
         # bias:
-        # self.bxi = nn.Parameter(torch.randn(n_xi))
-        # self.bv = nn.Parameter(torch.randn(l))
-        # self.bu = nn.Parameter(torch.randn(m))
+        self.bxi = nn.Parameter(torch.randn(n_xi))
+        self.bv = nn.Parameter(torch.randn(l))
+        self.bu = nn.Parameter(torch.randn(m))
         # # # # # # # # # Non-trainable parameters # # # # # # # # #
         # Auxiliary elements
         self.epsilon = 0.001
@@ -47,7 +51,7 @@ class PsiU(nn.Module):
         self.Lq = torch.zeros(m, m)
         self.Lr = torch.zeros(n, n)
         self.D22 = torch.zeros(m, n)
-        self.gamma = nn.Parameter(4*torch.randn(1))
+        self.gamma = nn.Parameter(torch.randn(1))
 
     def forward(self, t, w, xi):
         # Parameters update-------------------------------------------------------
@@ -58,11 +62,19 @@ class PsiU(nn.Module):
         m = self.m
         R = gammap * torch.eye(n, n)
         Q = (-1 / gammap) * torch.eye(m, m)
-        M = F.linear(self.X3, self.X3) + self.Y3 - self.Y3.T + self.epsilon * torch.eye(self.s)
-        M_tilde = F.linear(torch.eye(self.s) - M,
-                           torch.inverse(torch.eye(self.s) + M))
-        Zeta = M_tilde[0:self.m, 0:self.n]
-        self.D22 = gammap * Zeta
+        M1 = F.linear(self.X3.T, self.X3.T) + self.Y3 - self.Y3.T + F.linear(self.Z3.T,
+                                                                             self.Z3.T) + self.epsilon * torch.eye(
+            min(n, m))
+        if m >= n:
+            N = torch.vstack((F.linear(torch.eye(min(n, m)) - M1,
+                                       torch.inverse(torch.eye(min(n, m)) + M1).T),
+                              -2 * F.linear(self.Z3, torch.inverse(torch.eye(min(n, m)) + M1).T)))
+        else:
+            N = torch.hstack((F.linear(torch.inverse(torch.eye(min(n, m)) + M1),
+                                       torch.eye(min(n, m)) - M1).T,
+                              -2 * F.linear(torch.inverse(torch.eye(min(n, m)) + M1), self.Z3)))
+
+        self.D22 = gammap * N
         R_capital = R - (1 / gammap) * F.linear(self.D22.T, self.D22.T)
         C2_capital = torch.matmul(torch.matmul(self.D22.T, Q), self.C2)
         D21_capital = torch.matmul(torch.matmul(self.D22.T, Q), self.D21) - self.D12.T
@@ -80,7 +92,7 @@ class PsiU(nn.Module):
         self.F = H31
         self.B1 = H32
         # NN output:
-        self.E = 0.5 * (H11 + P + self.Y - self.Y.T)
+        self.E = 0.5 * (H11 +  P + self.Y - self.Y.T)
         # v signal:  [Change the following 2 lines if we don't want a strictly acyclic REN!]
         self.Lambda = torch.diag(H22)
         self.D11 = -torch.tril(H22, diagonal=-1)
@@ -97,13 +109,14 @@ class PsiU(nn.Module):
             vec = torch.zeros(self.l)
             vec[i] = 1
             v = F.linear(xi, self.C1[i, :]) + F.linear(epsilon,
-                                                       self.D11[i, :]) + F.linear(w, self.D12[i, :])  # self.bv[i]
+                                                       self.D11[i, :]) + F.linear(w, self.D12[i, :])\
+                + self.bv[i]
             epsilon = epsilon + vec * torch.relu(v / self.Lambda[i])
         E_xi_ = F.linear(xi, self.F) + F.linear(epsilon,
-                                                self.B1) + F.linear(w, self.B2)  # + self.bxi
+                                                self.B1) + F.linear(w, self.B2) + self.bxi
         xi_ = F.linear(E_xi_, self.E.inverse())
         u = F.linear(xi, self.C2) + F.linear(epsilon, self.D21) + \
-            F.linear(w, self.D22)  # + self.bu
+            F.linear(w, self.D22) + self.bu
         return u, xi_, gammap
 
 

@@ -5,8 +5,9 @@ def calculate_collisions(x, sys, min_dist):
     deltax = x[:, 0::4].repeat(sys.n_agents, 1, 1) - x[:, 0::4].repeat(sys.n_agents, 1, 1).transpose(0, 2)
     deltay = x[:, 1::4].repeat(sys.n_agents, 1, 1) - x[:, 1::4].repeat(sys.n_agents, 1, 1).transpose(0, 2)
     distance_sq = (deltax ** 2 + deltay ** 2)
-    n_coll = ((0.0001 < distance_sq) * (distance_sq < min_dist**2)).sum()
+    n_coll = ((0.0001 < distance_sq) * (distance_sq < min_dist ** 2)).sum()
     return n_coll
+
 
 def set_params(sys_model):
     if sys_model == "corridor":
@@ -46,7 +47,7 @@ def set_params(sys_model):
         n_traj = 1  # number of trajectories collected at each step of the learning
         std_ini = 0  # standard deviation of initial conditions
     return min_dist, t_end, n_agents, x0, xbar, linear, learning_rate, epochs, Q, alpha_u, alpha_ca, alpha_obst, n_xi, \
-           l, n_traj, std_ini
+        l, n_traj, std_ini
 
 
 def get_ini_cond(n_agents):
@@ -89,6 +90,6 @@ def get_ini_cond(n_agents):
                              -3, 5.0, 0, 0,
                              ])
     else:
-        x0 = torch.randn(4*n_agents)
-        xbar = torch.zeros(4*n_agents)
+        x0 = torch.randn(4 * n_agents)
+        xbar = torch.zeros(4 * n_agents)
     return x0, xbar
