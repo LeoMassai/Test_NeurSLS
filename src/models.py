@@ -62,17 +62,17 @@ class PsiU(nn.Module):
         m = self.m
         R = gammap * torch.eye(n, n)
         Q = (-1 / gammap) * torch.eye(m, m)
-        M1 = F.linear(self.X3.T, self.X3.T) + self.Y3 - self.Y3.T + F.linear(self.Z3.T,
+        M = F.linear(self.X3.T, self.X3.T) + self.Y3 - self.Y3.T + F.linear(self.Z3.T,
                                                                              self.Z3.T) + self.epsilon * torch.eye(
             min(n, m))
         if m >= n:
-            N = torch.vstack((F.linear(torch.eye(min(n, m)) - M1,
-                                       torch.inverse(torch.eye(min(n, m)) + M1).T),
-                              -2 * F.linear(self.Z3, torch.inverse(torch.eye(min(n, m)) + M1).T)))
+            N = torch.vstack((F.linear(torch.eye(min(n, m)) - M,
+                                       torch.inverse(torch.eye(min(n, m)) + M).T),
+                              -2 * F.linear(self.Z3, torch.inverse(torch.eye(min(n, m)) + M).T)))
         else:
-            N = torch.hstack((F.linear(torch.inverse(torch.eye(min(n, m)) + M1),
-                                       torch.eye(min(n, m)) - M1).T,
-                              -2 * F.linear(torch.inverse(torch.eye(min(n, m)) + M1), self.Z3)))
+            N = torch.hstack((F.linear(torch.inverse(torch.eye(min(n, m)) + M),
+                                       (torch.eye(min(n, m)) - M).T),
+                              -2 * F.linear(torch.inverse(torch.eye(min(n, m)) + M), self.Z3)))
 
         self.D22 = gammap * N
         R_capital = R - (1 / gammap) * F.linear(self.D22.T, self.D22.T)
