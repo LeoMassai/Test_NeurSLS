@@ -284,9 +284,9 @@ class SystemRobotsDist(nn.Module):
         self.m = 2 * self.n_agents
         self.h = 0.05
         self.m1 = self.m2 = self.m3 = self.m4 = 1
-        self.k1 = self.k2 = self.k3 = self.k4 = 5
+        self.k1 = self.k2 = self.k3 = self.k4 = 1
         self.k5 = self.k6 = self.k7 = self.k8 = 0.5
-        self.c1 = self.c2 = self.c3 = self.c4 = 2
+        self.c1 = self.c2 = self.c3 = self.c4 = .5
         self.c5 = self.c6 = self.c7 = self.c8 = 0.5
         self.B = torch.tensor([
             [0, 0, 0, 0, 0, 0, 0, 0],

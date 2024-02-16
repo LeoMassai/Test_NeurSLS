@@ -41,7 +41,7 @@ def main(sys_model):
     M8 = torch.hstack((torch.zeros((2, 2)), torch.eye(2), torch.zeros((2, 20))))
     M9 = torch.hstack((torch.zeros((2, 6)), torch.eye(2), torch.zeros((2, 16))))
     M10 = torch.hstack((torch.zeros((4, 20)), torch.eye(4)))
-    M11 = torch.hstack(( torch.eye(2), torch.zeros((2, 22))))
+    M11 = torch.hstack((torch.eye(2), torch.zeros((2, 22))))
     M12 = torch.hstack((torch.zeros((2, 4)), torch.eye(2), torch.zeros((2, 18))))
 
     M = torch.vstack((M1, M2, M3, M4, M5, M6, M7, M8, M9, M10, M11, M12))
@@ -81,6 +81,8 @@ def main(sys_model):
           " -- epochs: %i" % epochs + " -- n_traj: %i" % n_traj + " -- std_ini: %.2f" % std_ini)
     print(" -- alpha_u: %.1f" % alpha_u + " -- alpha_ca: %i" % alpha_ca + " -- alpha_obst: %.1e" % alpha_obst)
     print("--------- --------- ---------  ---------")
+
+    lossl = torch.zeros(epochs)
     for epoch in range(epochs):
         gamma = []
         optimizer.zero_grad()
@@ -109,6 +111,7 @@ def main(sys_model):
         print(gamma)
         loss.backward(retain_graph=True)
         optimizer.step()
+        lossl[epoch] = loss
     # # # # # # # # Save trained model # # # # # # # #
     torch.save(ctl.psi_u.state_dict(), "trained_models/" + sys_model + "_tmp.pt")
     # # # # # # # # Print & plot results # # # # # # # #
