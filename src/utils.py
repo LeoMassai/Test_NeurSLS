@@ -16,7 +16,7 @@ def set_params(sys_model):
         min_dist = 1.  # min distance for collision avoidance
         t_end = 100
         n_agents = 2
-        x0, xbar = get_ini_cond(n_agents)
+        x0, xbar, xbarspring = get_ini_cond(n_agents)
         linear = False
         # # # # # # # # Hyperparameters # # # # # # # #
         learning_rate = 1e-3
@@ -29,12 +29,30 @@ def set_params(sys_model):
         l = np.array([20, 20])  # dimension of the square matrix D11 -- number of _non-linear layers_ of the REN
         n_traj = 5  # number of trajectories collected at each step of the learning
         std_ini = 0.2  # standard deviation of initial conditions
+    if sys_model == "distributedREN":
+        # # # # # # # # Parameters # # # # # # # #
+        min_dist = 1.  # min distance for collision avoidance
+        t_end = 100
+        n_agents = 4
+        x0, xbar, xbarspring = get_ini_cond(n_agents)
+        linear = False
+        # # # # # # # # Hyperparameters # # # # # # # #
+        learning_rate = 1e-3
+        epochs = 500
+        Q = torch.kron(torch.eye(n_agents), torch.diag(torch.tensor([1, 1, 1, 1.])))
+        alpha_u = 0.1  # Regularization parameter for penalizing the input
+        alpha_ca = 100
+        alpha_obst = 5e3
+        n_xi = np.array([20, 20,20, 20])  # \xi dimension -- number of states of REN
+        l = np.array([20, 20, 20, 20])  # dimension of the square matrix D11 -- number of _non-linear layers_ of the REN
+        n_traj = 5  # number of trajectories collected at each step of the learning
+        std_ini = 0.2  # standard deviation of initial conditions
     else:  # sys_model == "robots"
         # # # # # # # # Parameters # # # # # # # #
         min_dist = 0.5  # min distance for collision avoidance
         t_end = 100
         n_agents = 12
-        x0, xbar = get_ini_cond(n_agents)
+        x0, xbar, xbarspring = get_ini_cond(n_agents)
         linear = True
         # # # # # # # # Hyperparameters # # # # # # # #
         learning_rate = 2e-3
@@ -47,7 +65,7 @@ def set_params(sys_model):
         l = 24  # dimension of the square matrix D11 -- number of _non-linear layers_ of the REN
         n_traj = 1  # number of trajectories collected at each step of the learning
         std_ini = 0  # standard deviation of initial conditions
-    return min_dist, t_end, n_agents, x0, xbar, linear, learning_rate, epochs, Q, alpha_u, alpha_ca, alpha_obst, n_xi, \
+    return min_dist, t_end, n_agents, x0, xbar, xbarspring, linear, learning_rate, epochs, Q, alpha_u, alpha_ca, alpha_obst, n_xi, \
         l, n_traj, std_ini
 
 
@@ -59,6 +77,23 @@ def get_ini_cond(n_agents):
                            ])
         xbar = torch.tensor([-2, 2, 0, 0,
                              2., 2, 0, 0,
+                             ])
+        xbarspring = torch.zeros(4 * n_agents)
+    if n_agents == 4:
+        x0 = torch.tensor([-2, -1.5, 0, 0,
+                           2, -1.5, 0, 0,
+                           2, -3, 0, 0,
+                           -2, -3, 0, 0,
+                           ])
+        xbar = torch.tensor([-2, 3, 0, 0,
+                             2, 3, 0, 0,
+                             2, 1.5, 0, 0,
+                             -2, 1.5, 0, 0,
+                             ])
+        xbarspring = torch.tensor([-2, 2, 2, -2,
+                             3, 3, 1.5, 1.5,
+                             0, 0, 0, 0,
+                             2.25, 2.25, 2.25, 2.25,
                              ])
     # Robots problem
     elif n_agents == 12:
@@ -90,7 +125,9 @@ def get_ini_cond(n_agents):
                              -3, 3, 0, 0,
                              -3, 5.0, 0, 0,
                              ])
+        xbarspring = torch.zeros(4 * n_agents)
     else:
         x0 = torch.randn(4 * n_agents)
         xbar = torch.zeros(4 * n_agents)
-    return x0, xbar
+        xbarspring = torch.zeros(4 * n_agents)
+    return x0, xbar, xbarspring

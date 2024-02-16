@@ -24,61 +24,61 @@ def plot_trajectories(x, xbar, n_agents, text="", save=False, filename=None, T=1
     colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray',
               'tab:olive', 'tab:cyan', '#90ee90', '#c20078']
     for i in range(n_agents):
-        plt.plot(x[:T+1,4*i].detach(), x[:T+1,4*i+1].detach(), color=colors[i%12], linewidth=1)
+        plt.plot(x[:T + 1, 4 * i].detach(), x[:T + 1, 4 * i + 1].detach(), color=colors[i % 12], linewidth=1)
         # plt.plot(x[T:,4*i].detach(), x[T:,4*i+1].detach(), color=colors[i%12], linestyle='dotted', linewidth=0.5)
-        plt.plot(x[T:,4*i].detach(), x[T:,4*i+1].detach(), color='k', linewidth=0.125, linestyle='dotted')
+        plt.plot(x[T:, 4 * i].detach(), x[T:, 4 * i + 1].detach(), color='k', linewidth=0.125, linestyle='dotted')
     for i in range(n_agents):
-        plt.plot(x[0,4*i].detach(), x[0,4*i+1].detach(), color=colors[i%12], marker='o', fillstyle='none')
-        plt.plot(xbar[4*i].detach(), xbar[4*i+1].detach(), color=colors[i%12], marker='*')
+        plt.plot(x[0, 4 * i].detach(), x[0, 4 * i + 1].detach(), color=colors[i % 12], marker='o', fillstyle='none')
+        plt.plot(xbar[4 * i].detach(), xbar[4 * i + 1].detach(), color=colors[i % 12], marker='*')
     ax = plt.gca()
     if dots:
         for i in range(n_agents):
             for j in range(T):
-                plt.plot(x[j, 4*i].detach(), x[j, 4*i+1].detach(), color=colors[i%12], marker='o')
+                plt.plot(x[j, 4 * i].detach(), x[j, 4 * i + 1].detach(), color=colors[i % 12], marker='o')
     if circles:
         for i in range(n_agents):
-            r = min_dist/2
+            r = min_dist / 2
             # if obst:
             #     circle = plt.Circle((x[T-1, 4*i].detach(), x[T-1, 4*i+1].detach()), r, color='tab:purple', fill=False)
             # else:
-            circle = plt.Circle((x[T, 4*i].detach(), x[T, 4*i+1].detach()), r, color=colors[i%12], alpha=0.5,
+            circle = plt.Circle((x[T, 4 * i].detach(), x[T, 4 * i + 1].detach()), r, color=colors[i % 12], alpha=0.5,
                                 zorder=10)
             ax.add_patch(circle)
     ax.axes.xaxis.set_visible(axis)
     ax.axes.yaxis.set_visible(axis)
     # TODO: add legend ( solid line: t<T/3 , dotted line> t>T/3, etc )
     if save:
-        plt.savefig('figures/' + filename+'_'+text+'_trajectories.eps', format='eps')
+        plt.savefig('figures/' + filename + '_' + text + '_trajectories.eps', format='eps')
     else:
         plt.show()
     return fig
 
 
 def plot_traj_vs_time(t_end, n_agents, x, u=None, text="", save=False, filename=None):
-    t = torch.linspace(0,t_end-1, t_end)
+    t = torch.linspace(0, t_end - 1, t_end)
     if u is not None:
         p = 3
     else:
         p = 2
-    plt.figure(figsize=(4*p, 4))
+    plt.figure(figsize=(4 * p, 4))
     plt.subplot(1, p, 1)
     for i in range(n_agents):
-        plt.plot(t, x[:,4*i])
-        plt.plot(t, x[:,4*i+1])
+        plt.plot(t, x[:, 4 * i])
+        plt.plot(t, x[:, 4 * i + 1])
     plt.xlabel(r'$t$')
     plt.title(r'$x(t)$')
     plt.subplot(1, p, 2)
     for i in range(n_agents):
-        plt.plot(t, x[:,4*i+2])
-        plt.plot(t, x[:,4*i+3])
+        plt.plot(t, x[:, 4 * i + 2])
+        plt.plot(t, x[:, 4 * i + 3])
     plt.xlabel(r'$t$')
     plt.title(r'$v(t)$')
     plt.suptitle(text)
     if p == 3:
         plt.subplot(1, 3, 3)
         for i in range(n_agents):
-            plt.plot(t, u[:, 2*i])
-            plt.plot(t, u[:, 2*i+1])
+            plt.plot(t, u[:, 2 * i])
+            plt.plot(t, u[:, 2 * i + 1])
         plt.xlabel(r'$t$')
         plt.title(r'$u(t)$')
     if save:

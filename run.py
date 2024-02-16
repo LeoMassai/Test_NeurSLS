@@ -13,7 +13,7 @@ import numpy as np
 import torch
 import argparse
 
-from src.models import SystemRobots, Controller
+from src.models import SystemRobots, Controller, SystemRobotsDist
 from src.plots import plot_trajectories, plot_traj_vs_time
 from src.loss_functions import f_loss_states, f_loss_u, f_loss_ca, f_loss_obst
 from src.utils import calculate_collisions, set_params
@@ -25,28 +25,54 @@ def main(sys_model):
     :param gpu: Whether to use GPU during training.
     :return:
     """
+
+    ny = 2  # output dimension of single ren = input dimension of single ren from other ren
+    nx = 4  # number of states single agent = dimension of single exogenous input
+    n_agents = 4
     torch.manual_seed(1)
 
-    o2 = torch.zeros((2, 2))
-    i2 = torch.eye(2)
-    o4 = torch.zeros((4, 4))
-    N = 2
+    M1 = torch.hstack((torch.zeros((4, 8)), torch.eye(4), torch.zeros((4, 12))))
+    M2 = torch.hstack((torch.zeros((2, 2)), torch.eye(2), torch.zeros((2, 20))))
+    M3 = torch.hstack((torch.zeros((2, 6)), torch.eye(2), torch.zeros((2, 16))))
+    M4 = torch.hstack((torch.zeros((4, 12)), torch.eye(4), torch.zeros((4, 8))))
+    M5 = torch.hstack((torch.zeros((2, 4)), torch.eye(2), torch.zeros((2, 18))))
+    M6 = torch.hstack((torch.eye(2), torch.zeros((2, 22))))
+    M7 = torch.hstack((torch.zeros((4, 16)), torch.eye(4), torch.zeros((4, 4))))
+    M8 = torch.hstack((torch.zeros((2, 2)), torch.eye(2), torch.zeros((2, 20))))
+    M9 = torch.hstack((torch.zeros((2, 6)), torch.eye(2), torch.zeros((2, 16))))
+    M10 = torch.hstack((torch.zeros((4, 20)), torch.eye(4)))
+    M11 = torch.hstack(( torch.eye(2), torch.zeros((2, 22))))
+    M12 = torch.hstack((torch.zeros((2, 4)), torch.eye(2), torch.zeros((2, 18))))
 
-    Muy = torch.vstack((torch.hstack((o2, i2)), o4, torch.hstack((i2, o2)), o4))
-    Mud = torch.vstack((torch.zeros((2, 8)),
-                        torch.hstack((torch.eye(4), o4)), torch.zeros((2, 8)),
-                        torch.hstack((o4, torch.eye(4)))))
+    M = torch.vstack((M1, M2, M3, M4, M5, M6, M7, M8, M9, M10, M11, M12))
+
+    Muy = M[:, 0:8]
+    Mud = M[:, 7:-1]
+
+    N = 4
+
+    # Muy = torch.vstack((torch.hstack((o2, i2)), o4, torch.hstack((i2, o2)), o4))
+    # Mud = torch.vstack((torch.zeros((2, 8)),
+    #  torch.hstack((torch.eye(4), o4)), torch.zeros((2, 8)),
+    #  torch.hstack((o4, torch.eye(4)))))
 
     # # # # # # # # Parameters and hyperparameters # # # # # # # #
-    if sys_model == "corridor" or sys_model == "robots":
+    if sys_model == "corridor" or sys_model == "robots" or sys_model == "distributedREN":
         params = set_params(sys_model)
-        min_dist, t_end, n_agents, x0, xbar, linear, learning_rate, epochs, Q, \
+        min_dist, t_end, n_agents, x0, xbar, xbarspring, linear, learning_rate, epochs, Q, \
             alpha_u, alpha_ca, alpha_obst, n_xi, l, n_traj, std_ini = params
     else:
         raise ValueError("System model not implemented.")
+
+    if sys_model == "distributedREN":
+        sys = SystemRobotsDist(xbarspring, xbar, linear)
+    else:
+        sys = SystemRobots(xbar, linear)
+
     # # # # # # # # Define models # # # # # # # #
-    sys = SystemRobots(xbar, linear)
-    ctl = Controller(sys.f, N, Muy, Mud, np.array([6, 6]), np.array([2, 2]), n_xi, l)
+
+    ctl = Controller(sys.f, N, Muy, Mud, np.array([ny + nx, ny + nx, ny + nx, ny + nx]), np.array([ny, ny, ny, ny]),
+                     n_xi, l)
     # # # # # # # # Define optimizer and parameters # # # # # # # #
     optimizer = torch.optim.Adam(ctl.parameters(), lr=learning_rate)
     # # # # # # # # Training # # # # # # # #
@@ -65,8 +91,8 @@ def main(sys_model):
         for kk in range(n_traj):
             w_in = torch.zeros(t_end + 1, sys.n)
             w_in[0, :] = (x0.detach() - sys.xbar) + std_ini * torch.randn(x0.shape)
-            u = torch.zeros(sys.m)
             x = sys.xbar
+            u = torch.zeros(sys.m)
             xi = torch.zeros((sum(n_xi)))
             omega = (x, u)
             for t in range(t_end):
@@ -123,7 +149,7 @@ def main(sys_model):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sys_model', type=str, default='corridor')
+    parser.add_argument('--sys_model', type=str, default='distributedREN')
     args = parser.parse_args()
     # Run main
     main(args.sys_model)

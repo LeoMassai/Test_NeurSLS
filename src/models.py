@@ -108,13 +108,13 @@ class RENRG(nn.Module):
             vec[i] = 1
             v = F.linear(xi, self.C1[i, :]) + F.linear(epsilon,
                                                        self.D11[i, :]) + F.linear(w, self.D12[i, :]) \
-                #+ self.bv[i]
+                # + self.bv[i]
             epsilon = epsilon + vec * torch.relu(v / self.Lambda[i])
         E_xi_ = F.linear(xi, self.F) + F.linear(epsilon,
-                                                self.B1) + F.linear(w, self.B2) #+ self.bxi
+                                                self.B1) + F.linear(w, self.B2)  # + self.bxi
         xi_ = F.linear(E_xi_, self.E.inverse())
         u = F.linear(xi, self.C2) + F.linear(epsilon, self.D21) + \
-            F.linear(w, self.D22) #+ self.bu
+            F.linear(w, self.D22)  # + self.bu
         return u, xi_
 
 
@@ -239,7 +239,7 @@ class PsiU(nn.Module):
             widey = l.m
             stopu = stopu + wideu
             stopy = stopy + widey
-            gamma = 1 / (np.sqrt(2) + torch.square(yp[j]))
+            gamma = 1 / (np.sqrt(2) + yp[j])
             widex = l.n_xi
             startx = stopx
             stopx = stopx + widex
@@ -256,3 +256,130 @@ class PsiU(nn.Module):
         xi = torch.cat(xi_list)
 
         return y, xi, gamma_list
+
+
+class SystemRobotsDist(nn.Module):
+    def __init__(self, xbarspring, xbar, linear=True):
+        super().__init__()
+        self.xbar = xbar
+        self.n_agents = 4
+        self.xt1 = xbarspring[0]
+        self.xt2 = xbarspring[1]
+        self.xt3 = xbarspring[2]
+        self.xt4 = xbarspring[3]
+        self.yt1 = xbarspring[4]
+        self.yt2 = xbarspring[5]
+        self.yt3 = xbarspring[6]
+        self.yt4 = xbarspring[7]
+        self.xt5 = xbarspring[8]
+        self.xt6 = xbarspring[9]
+        self.xt7 = xbarspring[10]
+        self.xt8 = xbarspring[11]
+        self.yt5 = xbarspring[12]
+        self.yt6 = xbarspring[13]
+        self.yt7 = xbarspring[14]
+        self.yt8 = xbarspring[15]
+
+        self.n = 4 * self.n_agents
+        self.m = 2 * self.n_agents
+        self.h = 0.05
+        self.m1 = self.m2 = self.m3 = self.m4 = 1
+        self.k1 = self.k2 = self.k3 = self.k4 = 5
+        self.k5 = self.k6 = self.k7 = self.k8 = 0.5
+        self.c1 = self.c2 = self.c3 = self.c4 = 2
+        self.c5 = self.c6 = self.c7 = self.c8 = 0.5
+        self.B = torch.tensor([
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [1 / self.m1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1 / self.m1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1 / self.m2, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1 / self.m2, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1 / self.m3, 0, 0, 0],
+            [0, 0, 0, 0, 0, 1 / self.m3, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1 / self.m4, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1 / self.m4]
+        ])
+
+        self.bias = torch.tensor([[0],
+                                  [0],
+                                  [(
+                                           self.k1 + self.k5 + self.k8) / self.m1 * self.xt1 - self.k5 / self.m1 * self.xt5 - self.k8 / self.m1 * self.xt8],
+                                  [(
+                                           self.k1 + self.k5 + self.k8) / self.m1 * self.yt1 - self.k5 / self.m1 * self.yt5 - self.k8 / self.m1 * self.yt8],
+                                  [0],
+                                  [0],
+                                  [(
+                                           self.k2 + self.k5 + self.k6) / self.m2 * self.xt2 - self.k5 / self.m2 * self.xt5 - self.k6 / self.m2 * self.xt6],
+                                  [(
+                                           self.k2 + self.k5 + self.k6) / self.m2 * self.yt2 - self.k5 / self.m2 * self.yt5 - self.k6 / self.m2 * self.yt6],
+                                  [0],
+                                  [0],
+                                  [(
+                                           self.k3 + self.k6 + self.k7) / self.m3 * self.xt3 - self.k6 / self.m3 * self.xt6 - self.k7 / self.m3 * self.xt7],
+                                  [(
+                                           self.k3 + self.k6 + self.k7) / self.m3 * self.yt3 - self.k6 / self.m3 * self.yt6 - self.k7 / self.m3 * self.yt7],
+                                  [0],
+                                  [0],
+                                  [(
+                                           self.k4 + self.k8 + self.k7) / self.m4 * self.xt4 - self.k8 / self.m4 * self.xt8 - self.k7 / self.m4 * self.xt7],
+                                  [(
+                                           self.k4 + self.k8 + self.k7) / self.m4 * self.yt4 - self.k8 / self.m4 * self.yt8 - self.k7 / self.m4 * self.yt7]
+                                  ])
+
+    def A(self, x):
+        A = torch.tensor([
+            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [(-self.k1 - self.k5 - self.k8) / self.m1, 0, (-self.c1 - self.c5 - self.c8) / self.m1, 0,
+             self.k5 / self.m1, 0, self.c5 / self.m1, 0, 0, 0, 0, 0, self.k8 / self.m1, 0, self.c8 / self.m1,
+             0],
+            [0, (-self.k1 - self.k5 - self.k8) / self.m1, 0, (-self.c1 - self.c5 - self.c8) / self.m1, 0,
+             self.k5 / self.m1, 0, self.c5 / self.m1, 0, 0, 0, 0, 0, self.k8 / self.m1, 0,
+             self.c8 / self.m1],
+            [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+            [self.k5 / self.m2, 0, self.c5 / self.m2, 0, (-self.k2 - self.k5 - self.k6) / self.m2, 0,
+             (-self.c2 - self.c5 - self.c6) / self.m2, 0, self.k6 / self.m2, 0, self.c6 / self.m2, 0, 0, 0, 0,
+             0],
+            [0, self.k5 / self.m2, 0, self.c5 / self.m2, 0, (-self.k2 - self.k5 - self.k6) / self.m2, 0,
+             (-self.c2 - self.c5 - self.c6) / self.m2, 0, self.k6 / self.m2, 0, self.c6 / self.m2, 0, 0, 0,
+             0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+            [0, 0, 0, 0, self.k6 / self.m3, 0, self.c6 / self.m3, 0, (-self.k3 - self.k6 - self.k7) / self.m3, 0,
+             (-self.c3 - self.c6 - self.c7) / self.m3, 0, self.k7 / self.m3, 0, self.c7 / self.m3,
+             0],
+            [0, 0, 0, 0, 0, self.k6 / self.m3, 0, self.c6 / self.m3, 0, (-self.k3 - self.k6 - self.k7) / self.m3, 0,
+             (-self.c3 - self.c6 - self.c7) / self.m3, 0, self.k7 / self.m3, 0,
+             self.c7 / self.m3],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [self.k8 / self.m4, 0, self.c8 / self.m4, 0, 0, 0, 0, 0, self.k7 / self.m4, 0, self.c7 / self.m4, 0,
+             (-self.k4 - self.k8 - self.k7) / self.m4, 0, (-self.c4 - self.c8 - self.c7) / self.m4,
+             0],
+            [0, self.k8 / self.m4, 0, self.c8 / self.m4, 0, 0, 0, 0, 0, self.k7 / self.m4, 0, self.c7 / self.m4, 0,
+             (-self.k4 - self.k8 - self.k7) / self.m4, 0,
+             (-self.c4 - self.c8 - self.c7) / self.m4]
+        ])
+        A = torch.eye(16) + self.h * A
+        return A
+
+    def f(self, t, x, u):
+        sat = False
+        if sat:
+            v = torch.ones(self.m)
+            u = torch.minimum(torch.maximum(u, -v), v)
+        f = F.linear(x, self.A(x)) + F.linear(u, self.B) + self.bias.squeeze()
+        return f
+
+    def forward(self, t, x, u, w):
+        x_ = self.f(t, x, u) + w  # here we can add noise not modelled
+        y = x_
+        return x_, y
