@@ -368,7 +368,6 @@ class SystemRobotsDist(nn.Module):
              (-self.k4 - self.k8 - self.k7) / self.m4, 0,
              (-self.c4 - self.c8 - self.c7) / self.m4]
         ])
-        A = torch.eye(16) + self.h * A
         return A
 
     def f(self, t, x, u):
@@ -376,10 +375,11 @@ class SystemRobotsDist(nn.Module):
         if sat:
             v = torch.ones(self.m)
             u = torch.minimum(torch.maximum(u, -v), v)
-        f = F.linear(x, self.A(x)) + F.linear(u, self.B) + self.bias.squeeze()
+        f2 = F.linear(x-self.xbar, self.A(x)) + F.linear(u, self.B)
+        f = x-self.xbar + self.h * f2+self.xbar
         return f
 
     def forward(self, t, x, u, w):
-        x_ = self.f(t, x, u) + w  # here we can add noise not modelled
+        x_ = self.f(t, x, u)+w  # here we can add noise not modelled
         y = x_
         return x_, y

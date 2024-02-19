@@ -47,7 +47,7 @@ def main(sys_model):
     M = torch.vstack((M1, M2, M3, M4, M5, M6, M7, M8, M9, M10, M11, M12))
 
     Muy = M[:, 0:8]
-    Mud = M[:, 7:-1]
+    Mud = M[:, 8:24]
 
     N = 4
 
@@ -82,7 +82,7 @@ def main(sys_model):
     print(" -- alpha_u: %.1f" % alpha_u + " -- alpha_ca: %i" % alpha_ca + " -- alpha_obst: %.1e" % alpha_obst)
     print("--------- --------- ---------  ---------")
 
-    lossl = torch.zeros(epochs)
+    lossl = np.zeros(epochs)
     for epoch in range(epochs):
         gamma = []
         optimizer.zero_grad()
@@ -109,9 +109,10 @@ def main(sys_model):
         print("Epoch: %i --- Loss: %.4f ---||--- Loss x: %.2f --- " % (epoch, loss / t_end, loss_x) +
               "Loss u: %.2f --- Loss ca: %.2f --- Loss obst: %.2f" % (loss_u, loss_ca, loss_obst))
         print(gamma)
-        loss.backward(retain_graph=True)
+        loss.backward()
         optimizer.step()
-        lossl[epoch] = loss
+        loss.detach()
+        lossl[epoch] = loss.detach()
     # # # # # # # # Save trained model # # # # # # # #
     torch.save(ctl.psi_u.state_dict(), "trained_models/" + sys_model + "_tmp.pt")
     # # # # # # # # Print & plot results # # # # # # # #
